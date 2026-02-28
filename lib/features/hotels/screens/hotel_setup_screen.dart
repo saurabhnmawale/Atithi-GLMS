@@ -166,7 +166,7 @@ class _HotelSetupScreenState extends ConsumerState<HotelSetupScreen> {
                               flex: 3,
                               child: DropdownButtonFormField<String>(
                                 key: ValueKey(r.category),
-                                initialValue: r.category,
+                                value: r.category,
                                 decoration: const InputDecoration(
                                   labelText: 'Category',
                                   isDense: true,

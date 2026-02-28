@@ -272,7 +272,7 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 key: ValueKey(category),
-                initialValue: category,
+                value: category,
                 decoration: const InputDecoration(labelText: 'Room Category'),
                 items: categories
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
