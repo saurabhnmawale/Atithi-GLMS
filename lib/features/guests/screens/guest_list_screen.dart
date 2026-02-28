@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'dart:io';
 import '../../../data/database/app_database.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/common_widgets.dart';
@@ -43,14 +42,19 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
   }
 
   Future<void> _importCsv() async {
+    // withData: true ensures bytes are always populated on every platform.
+    // On web, accessing `path` throws a DartError; on iOS it can be null.
+    // Always read from bytes — it works everywhere.
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv'],
+      withData: true,
     );
-    if (result == null || result.files.single.path == null) return;
+    if (result == null) return;
 
-    final file = File(result.files.single.path!);
-    final content = await file.readAsString();
+    final picked = result.files.single;
+    if (picked.bytes == null) return;
+    final content = String.fromCharCodes(picked.bytes!);
     final rows = const CsvToListConverter().convert(content, eol: '\n');
     if (rows.isEmpty) return;
 
@@ -267,7 +271,8 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: category,
+                key: ValueKey(category),
+                initialValue: category,
                 decoration: const InputDecoration(labelText: 'Room Category'),
                 items: categories
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
@@ -312,7 +317,7 @@ class _GuestTile extends StatelessWidget {
           arguments: {'guestId': guest.id, 'eventId': eventId},
         ),
         leading: CircleAvatar(
-          backgroundColor: GuestStatusHelper.color(guest.status).withOpacity(0.15),
+          backgroundColor: GuestStatusHelper.color(guest.status).withValues(alpha:0.15),
           child: Text(
             guest.name.isNotEmpty ? guest.name[0].toUpperCase() : '?',
             style: TextStyle(

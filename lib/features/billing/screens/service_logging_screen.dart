@@ -125,6 +125,8 @@ class _ServiceLoggingScreenState extends ConsumerState<ServiceLoggingScreen> {
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     setState(() => _saving = true);
     try {
       await ref.read(billingRepositoryProvider).logCharge(
@@ -133,9 +135,8 @@ class _ServiceLoggingScreenState extends ConsumerState<ServiceLoggingScreen> {
             amount: amount,
           );
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Charge logged')));
-        Navigator.pop(context);
+        messenger.showSnackBar(const SnackBar(content: Text('Charge logged')));
+        navigator.pop();
       }
     } finally {
       if (mounted) setState(() => _saving = false);

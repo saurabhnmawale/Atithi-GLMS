@@ -134,6 +134,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
   }
 
   Future<void> _confirmCheckin(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final confirmed = await showConfirmDialog(
       context,
       title: 'Confirm Check-In',
@@ -150,7 +151,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             hotelId: _selectedHotel!.id,
             roomId: _selectedRoom!.id,
           );
-      if (mounted) Navigator.pop(context);
+      if (mounted) navigator.pop();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -214,9 +215,9 @@ class _RoomSelector extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.error.withOpacity(0.05),
+              color: AppTheme.error.withValues(alpha:0.05),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
             ),
             child: Text(
               'No available $category rooms in this hotel.',

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Column;
@@ -21,23 +21,31 @@ class ExportService {
   final AppDatabase db;
   final Event event;
 
-  /// Entry point — runs generation in an isolate then shares
+  /// Entry point — generates xlsx on the main isolate then shares.
+  // BUG 2B FIX: removed compute(). AppDatabase holds FFI Pointer objects
+  // (native SQLite handles) that cannot be serialized for isolate message
+  // passing — passing it via compute() crashes on Android and iOS.
+  // All DB reads are async and already non-blocking; xlsx assembly is fast
+  // enough on event-scale data to run on the main isolate without jank.
   Future<void> export(ExportType type) async {
-    final bytes = await compute(_generateInIsolate, _ExportParams(
+    final params = _ExportParams(
       type: type,
       eventId: event.id,
       eventName: event.name,
       db: db,
-    ));
+    );
+    final bytes = await _generate(params);
 
     final dir = await getTemporaryDirectory();
     final filename = '${_filename(type)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
     final file = File('${dir.path}/$filename');
     await file.writeAsBytes(bytes);
 
-    await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-      subject: '${event.name} — ${_label(type)}',
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
+        subject: '${event.name} — ${_label(type)}',
+      ),
     );
   }
 
@@ -82,8 +90,7 @@ class _ExportParams {
   });
 }
 
-/// Runs in isolate — no BuildContext allowed
-Future<Uint8List> _generateInIsolate(_ExportParams params) async {
+Future<Uint8List> _generate(_ExportParams params) async {
   switch (params.type) {
     case ExportType.guestBills:
       return _generateGuestBills(params);
@@ -251,7 +258,7 @@ Future<Uint8List> _generateHotelSummary(_ExportParams p) async {
     sheet.getRangeByIndex(totalRowIdx, 4).setNumber(hotelTotal);
     sheet.getRangeByIndex(totalRowIdx, 4).cellStyle.bold = true;
 
-    for (var i = 1; i <= 5; i++) sheet.autoFitColumn(i);
+    for (var i = 1; i <= 5; i++) { sheet.autoFitColumn(i); }
   }
 
   // suppress unused variable warning
@@ -314,7 +321,7 @@ Future<Uint8List> _generateConsolidated(_ExportParams p) async {
   sheet.getRangeByIndex(totalRowIdx, 6).setNumber(grandTotal);
   sheet.getRangeByIndex(totalRowIdx, 6).cellStyle.bold = true;
 
-  for (var i = 1; i <= 6; i++) sheet.autoFitColumn(i);
+  for (var i = 1; i <= 6; i++) { sheet.autoFitColumn(i); }
 
   // suppress unused variable warning
   // ignore: unused_local_variable
@@ -373,7 +380,7 @@ Future<Uint8List> _generateMovement(_ExportParams p) async {
     }
   }
 
-  for (var i = 1; i <= 7; i++) sheet.autoFitColumn(i);
+  for (var i = 1; i <= 7; i++) { sheet.autoFitColumn(i); }
 
   final bytes = Uint8List.fromList(wb.saveAsStream());
   wb.dispose();

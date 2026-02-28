@@ -133,10 +133,10 @@ class GuestsDao extends DatabaseAccessor<AppDatabase> with _$GuestsDaoMixin {
 
       // Update guest status
       await (update(guests)..where((g) => g.id.equals(guestId))).write(
-        GuestsCompanion(
-          status: const Value('checked_out'),
-          currentHotelId: const Value.absent(),
-          currentRoomId: const Value.absent(),
+        const GuestsCompanion(
+          status: Value('checked_out'),
+          currentHotelId: Value.absent(),
+          currentRoomId: Value.absent(),
         ),
       );
 

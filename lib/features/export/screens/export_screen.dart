@@ -76,7 +76,7 @@ class _ExportScreenState extends ConsumerState<ExportScreen> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.06),
+                      color: AppTheme.primary.withValues(alpha:0.06),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Row(
@@ -152,7 +152,7 @@ class _ExportCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: isLoading

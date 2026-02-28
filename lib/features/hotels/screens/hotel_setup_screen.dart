@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../shared/widgets/common_widgets.dart';
 import '../providers/hotels_provider.dart';
 
 class HotelSetupScreen extends ConsumerStatefulWidget {
@@ -159,14 +158,15 @@ class _HotelSetupScreenState extends ConsumerState<HotelSetupScreen> {
                                   labelText: 'Room No.',
                                   isDense: true,
                                 ),
-                                onChanged: (v) => _rooms[i] = r.copyWith(number: v),
+                                onChanged: (v) => _rooms[i] = _rooms[i].copyWith(number: v),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               flex: 3,
                               child: DropdownButtonFormField<String>(
-                                value: r.category,
+                                key: ValueKey(r.category),
+                                initialValue: r.category,
                                 decoration: const InputDecoration(
                                   labelText: 'Category',
                                   isDense: true,
@@ -175,7 +175,7 @@ class _HotelSetupScreenState extends ConsumerState<HotelSetupScreen> {
                                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                                     .toList(),
                                 onChanged: (v) =>
-                                    setState(() => _rooms[i] = r.copyWith(category: v!)),
+                                    setState(() => _rooms[i] = _rooms[i].copyWith(category: v!)),
                               ),
                             ),
                             const SizedBox(width: 8),

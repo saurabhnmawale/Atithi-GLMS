@@ -153,6 +153,7 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
   }
 
   Future<void> _confirm(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final ok = await showConfirmDialog(
       context,
       title: 'Confirm Transfer',
@@ -170,7 +171,7 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
             newHotelId: _destHotel!.id,
             newRoomId: _destRoom!.id,
           );
-      if (mounted) Navigator.pop(context);
+      if (mounted) navigator.pop();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -206,9 +207,9 @@ class _DestRooms extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.error.withOpacity(0.05),
+              color: AppTheme.error.withValues(alpha:0.05),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
             ),
             child: Text(
               'No available $category rooms at this hotel.',

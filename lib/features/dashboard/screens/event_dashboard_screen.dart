@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../data/database/app_database.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../../../app.dart';
@@ -15,7 +14,6 @@ class EventDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final eventAsync = ref.watch(eventByIdProvider(eventId));
-    final hotelsAsync = ref.watch(hotelsForEventProvider(eventId));
     final roomsAsync = ref.watch(roomsForEventProvider(eventId));
     final guestsAsync = ref.watch(guestsForEventProvider(eventId));
 
@@ -53,7 +51,6 @@ class EventDashboardScreen extends ConsumerWidget {
             data: (guests) {
               final checkedIn = guests.where((g) => g.status == 'checked_in').length;
               final checkedOut = guests.where((g) => g.status == 'checked_out').length;
-              final notIn = guests.where((g) => g.status == 'not_checked_in').length;
 
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -148,31 +145,31 @@ class _ActionGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      _ActionItem(
+      const _ActionItem(
         icon: Icons.people_outline,
         label: 'Guest List',
         route: AppRoutes.guestList,
         color: AppTheme.primary,
       ),
-      _ActionItem(
+      const _ActionItem(
         icon: Icons.hotel_outlined,
         label: 'Hotels & Rooms',
         route: AppRoutes.roomInventory,
         color: AppTheme.accent,
       ),
-      _ActionItem(
+      const _ActionItem(
         icon: Icons.add_business,
         label: 'Add Hotel',
         route: AppRoutes.hotelSetup,
         color: Colors.teal,
       ),
-      _ActionItem(
+      const _ActionItem(
         icon: Icons.room_service_outlined,
         label: 'Service Types',
         route: AppRoutes.serviceTypeConfig,
         color: Colors.purple,
       ),
-      _ActionItem(
+      const _ActionItem(
         icon: Icons.file_download_outlined,
         label: 'Export',
         route: AppRoutes.exportScreen,
@@ -199,7 +196,7 @@ class _ActionGrid extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: a.color.withOpacity(0.3)),
+              border: Border.all(color: a.color.withValues(alpha:0.3)),
             ),
             padding: const EdgeInsets.all(12),
             child: Column(

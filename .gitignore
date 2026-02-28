@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Claude Code local settings
+.claude/
+
+# Local utility/temp files
+tech_spec_extracted.txt
+extract_docx.ps1
+*.docx

@@ -61,9 +61,6 @@ class _RoomInventoryScreenState extends ConsumerState<RoomInventoryScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (allRooms) {
-              // Build filter options
-              final categories = allRooms.map((r) => r.category).toSet().toList()..sort();
-
               // Apply filters
               var filtered = allRooms.where((r) {
                 final hotelMatch = _filterHotelId == null ||
@@ -112,6 +109,14 @@ class _RoomInventoryScreenState extends ConsumerState<RoomInventoryScreen> {
                               selected: _filterHotelId == h.id.toString(),
                               onTap: () => setState(
                                   () => _filterHotelId = h.id.toString()),
+                              onLongPress: () => Navigator.pushNamed(
+                                context,
+                                AppRoutes.hotelSetup,
+                                arguments: {
+                                  'eventId': widget.eventId,
+                                  'hotelId': h.id,
+                                },
+                              ),
                             )),
                         const SizedBox(width: 8),
                         _FilterChip(
@@ -193,7 +198,7 @@ class _RoomTile extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: RoomStatusHelper.color(room.status).withOpacity(0.12),
+            color: RoomStatusHelper.color(room.status).withValues(alpha:0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
@@ -241,7 +246,7 @@ class _CountChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
@@ -254,12 +259,14 @@ class _FilterChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final Color? color;
+  final VoidCallback? onLongPress;
 
   const _FilterChip({
     required this.label,
     required this.selected,
     required this.onTap,
     this.color,
+    this.onLongPress,
   });
 
   @override
@@ -267,6 +274,7 @@ class _FilterChip extends StatelessWidget {
     final c = color ?? AppTheme.primary;
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Container(
         margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

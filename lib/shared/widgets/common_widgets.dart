@@ -25,9 +25,9 @@ class StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color?.withOpacity(0.1) ?? AppTheme.primary.withOpacity(0.08),
+          color: color?.withValues(alpha:0.1) ?? AppTheme.primary.withValues(alpha:0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color?.withOpacity(0.3) ?? AppTheme.primary.withOpacity(0.2)),
+          border: Border.all(color: color?.withValues(alpha:0.3) ?? AppTheme.primary.withValues(alpha:0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,9 +75,9 @@ class GuestTagChip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.vipGold.withOpacity(0.15),
+              color: AppTheme.vipGold.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.vipGold.withOpacity(0.5)),
+              border: Border.all(color: AppTheme.vipGold.withValues(alpha:0.5)),
             ),
             child: const Text(
               'VIP',
@@ -93,9 +93,9 @@ class GuestTagChip extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.relativeBlue.withOpacity(0.15),
+              color: AppTheme.relativeBlue.withValues(alpha:0.15),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.relativeBlue.withOpacity(0.5)),
+              border: Border.all(color: AppTheme.relativeBlue.withValues(alpha:0.5)),
             ),
             child: const Text(
               'Close Relative',
@@ -123,9 +123,9 @@ class StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha:0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha:0.4)),
       ),
       child: Text(
         label,
@@ -203,7 +203,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: AppTheme.textSecondary.withOpacity(0.4)),
+            Icon(icon, size: 64, color: AppTheme.textSecondary.withValues(alpha:0.4)),
             const SizedBox(height: 16),
             Text(
               title,

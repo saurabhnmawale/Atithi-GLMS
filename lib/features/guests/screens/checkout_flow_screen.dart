@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../data/database/app_database.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/common_widgets.dart';
 import '../providers/guests_provider.dart';
@@ -18,7 +17,7 @@ class CheckoutFlowScreen extends ConsumerStatefulWidget {
 
 class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
   bool _saving = false;
-  bool _checkedOut = false;
+  final bool _checkedOut = false;
 
   @override
   Widget build(BuildContext context) {
@@ -147,10 +146,10 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.warning.withOpacity(0.08),
+                                color: AppTheme.warning.withValues(alpha:0.08),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                    color: AppTheme.warning.withOpacity(0.4)),
+                                    color: AppTheme.warning.withValues(alpha:0.4)),
                               ),
                               child: const Row(
                                 children: [
@@ -197,6 +196,7 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
   }
 
   Future<void> _checkout(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final ok = await showConfirmDialog(
       context,
       title: 'Confirm Checkout',
@@ -212,7 +212,7 @@ class _CheckoutFlowScreenState extends ConsumerState<CheckoutFlowScreen> {
       await ref.read(guestsRepositoryProvider).checkOut(widget.guestId);
       if (mounted) {
         // Pop back to guest detail which shows undo banner
-        Navigator.pop(context);
+        navigator.pop();
       }
     } finally {
       if (mounted) setState(() => _saving = false);

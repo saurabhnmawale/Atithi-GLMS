@@ -140,6 +140,7 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
   }
 
   Future<void> _confirm(BuildContext context) async {
+    final navigator = Navigator.of(context);
     final ok = await showConfirmDialog(
       context,
       title: 'Change Room',
@@ -155,7 +156,7 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
             newHotelId: _selectedHotel!.id,
             newRoomId: _selectedRoom!.id,
           );
-      if (mounted) Navigator.pop(context);
+      if (mounted) navigator.pop();
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -196,9 +197,9 @@ class _AvailableRooms extends ConsumerWidget {
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.error.withOpacity(0.05),
+              color: AppTheme.error.withValues(alpha:0.05),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
             ),
             child: Text(
               'No available $category rooms (excluding current room).',

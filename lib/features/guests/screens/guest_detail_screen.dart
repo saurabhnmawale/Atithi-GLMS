@@ -93,7 +93,7 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.warning.withOpacity(0.1),
+                      color: AppTheme.warning.withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppTheme.warning),
                     ),
@@ -283,6 +283,7 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
   }
 
   Future<void> _undoCheckout(BuildContext context, Guest guest, AsyncValue<List<Hotel>> hotelsAsync) async {
+    final messenger = ScaffoldMessenger.of(context);
     // We need the last hotel/room — look at stays
     final stays = await ref.read(guestsRepositoryProvider).getStaySegments(guest.id);
     if (stays.isEmpty) return;
@@ -295,7 +296,7 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
     );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
             content: Text(success ? 'Checkout undone' : 'Undo window has expired')),
       );
@@ -412,7 +413,7 @@ class _StayTile extends StatelessWidget {
           '${stay.checkOutAt != null ? '\nOut: ${fmt.format(stay.checkOutAt!)}' : ''}',
         ),
         trailing: isOpen
-            ? StatusBadge(label: 'Active', color: AppTheme.success)
+            ? const StatusBadge(label: 'Active', color: AppTheme.success)
             : null,
       ),
     );

@@ -50,13 +50,19 @@ class HotelsDao extends DatabaseAccessor<AppDatabase> with _$HotelsDaoMixin {
     return (select(rooms)..where((r) => r.hotelId.isIn(hotelIds))).get();
   }
 
+  // BUG 1 FIX: replaced asyncExpand(inner .watch()) with a single join query.
+  // asyncExpand is a sequential concat — it waits for the inner stream to
+  // complete before processing the next outer emission. Drift's .watch() never
+  // completes, so any hotel added after the first one was silently ignored.
+  // A join query produces one infinite stream that reacts to changes in both
+  // tables simultaneously, with no chaining required.
   Stream<List<Room>> watchRoomsForEvent(int eventId) {
-    final hotelQuery = select(hotels)..where((h) => h.eventId.equals(eventId));
-    return hotelQuery.watch().asyncExpand((eventHotels) {
-      final ids = eventHotels.map((h) => h.id).toList();
-      if (ids.isEmpty) return Stream.value([]);
-      return (select(rooms)..where((r) => r.hotelId.isIn(ids))).watch();
-    });
+    final query = select(rooms).join([
+      innerJoin(hotels, hotels.id.equalsExp(rooms.hotelId)),
+    ])..where(hotels.eventId.equals(eventId));
+    return query.watch().map(
+      (rows) => rows.map((row) => row.readTable(rooms)).toList(),
+    );
   }
 
   Future<Room?> getRoomById(int id) =>
