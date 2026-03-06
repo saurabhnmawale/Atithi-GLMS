@@ -18,7 +18,6 @@ class GuestsRepository {
   Future<int> addGuest({
     required int eventId,
     required String name,
-    required String assignedCategory,
     bool isVip = false,
     bool isCloseRelative = false,
     String? specialRequests,
@@ -26,7 +25,6 @@ class GuestsRepository {
       _db.guestsDao.insertGuest(GuestsCompanion(
         eventId: Value(eventId),
         name: Value(name),
-        assignedCategory: Value(assignedCategory),
         isVip: Value(isVip),
         isCloseRelative: Value(isCloseRelative),
         specialRequests: Value(specialRequests),
@@ -47,14 +45,31 @@ class GuestsRepository {
     ));
   }
 
+  /// Override the checkout date for a guest. Pass null to revert to event end_date.
+  Future<void> updateCheckoutDate(int guestId, DateTime? date) =>
+      _db.guestsDao.updateCheckoutDate(guestId, date);
+
+  /// Resolves the effective checkout date:
+  ///   guest.checkoutDate if overridden, otherwise event.endDate.
+  /// Resolution happens here in the repository, not in the UI layer.
+  Future<DateTime> getEffectiveCheckoutDate(int guestId, int eventId) async {
+    final guest = await _db.guestsDao.getGuestById(guestId);
+    if (guest?.checkoutDate != null) return guest!.checkoutDate!;
+    final event = await _db.eventsDao.getEventById(eventId);
+    return event?.endDate ?? DateTime.now();
+  }
+
+  /// CSV import — name column only required (PRD v2.2).
+  /// Each row map must contain 'name'. Optional keys: 'vip', 'close_relative',
+  /// 'special_requests'. No 'category' field.
   Future<void> importGuests(int eventId, List<Map<String, dynamic>> rows) =>
       _db.guestsDao.insertGuests(rows
           .map((r) => GuestsCompanion(
                 eventId: Value(eventId),
                 name: Value(r['name'] as String),
-                assignedCategory: Value(r['category'] as String),
                 isVip: Value((r['vip'] as bool?) ?? false),
-                isCloseRelative: Value((r['close_relative'] as bool?) ?? false),
+                isCloseRelative:
+                    Value((r['close_relative'] as bool?) ?? false),
                 specialRequests: Value(r['special_requests'] as String?),
               ))
           .toList());

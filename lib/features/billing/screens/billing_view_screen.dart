@@ -61,7 +61,8 @@ class BillingViewScreen extends ConsumerWidget {
                                   Text(guest.name,
                                       style: const TextStyle(
                                           fontSize: 17, fontWeight: FontWeight.bold)),
-                                  Text(guest.assignedCategory,
+                                  Text(
+                                      GuestStatusHelper.label(guest.status),
                                       style: const TextStyle(
                                           fontSize: 13,
                                           color: AppTheme.textSecondary)),

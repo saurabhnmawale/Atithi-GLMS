@@ -43,8 +43,6 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
 
   Future<void> _importCsv() async {
     // withData: true ensures bytes are always populated on every platform.
-    // On web, accessing `path` throws a DartError; on iOS it can be null.
-    // Always read from bytes — it works everywhere.
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv'],
@@ -60,13 +58,12 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
 
     final headers = rows.first.map((h) => h.toString().toLowerCase().trim()).toList();
     final nameIdx = headers.indexOf('name');
-    final catIdx = headers.indexOf('category');
-    if (nameIdx < 0 || catIdx < 0) {
+
+    // PRD v2.2: name column is the only required column. No category at import.
+    if (nameIdx < 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'CSV must have "name" and "category" columns')),
+          const SnackBar(content: Text('CSV must have a "name" column')),
         );
       }
       return;
@@ -74,15 +71,31 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
 
     final preview = rows
         .skip(1)
-        .where((r) => r.length > nameIdx && r[nameIdx].toString().isNotEmpty)
+        .where((r) => r.length > nameIdx && r[nameIdx].toString().trim().isNotEmpty)
         .map((r) => {
               'name': r[nameIdx].toString().trim(),
-              'category': r.length > catIdx ? r[catIdx].toString().trim() : 'Standard',
-              'vip': headers.contains('vip') ? r[headers.indexOf('vip')].toString() == 'true' : false,
-              'close_relative': headers.contains('close_relative') ? r[headers.indexOf('close_relative')].toString() == 'true' : false,
-              'special_requests': headers.contains('special_requests') ? r[headers.indexOf('special_requests')].toString() : null,
+              'vip': headers.contains('vip')
+                  ? r[headers.indexOf('vip')].toString().toLowerCase() == 'true'
+                  : false,
+              'close_relative': headers.contains('close_relative')
+                  ? r[headers.indexOf('close_relative')].toString().toLowerCase() == 'true'
+                  : false,
+              'special_requests': headers.contains('special_requests')
+                  ? r[headers.indexOf('special_requests')].toString().trim().isEmpty
+                      ? null
+                      : r[headers.indexOf('special_requests')].toString().trim()
+                  : null,
             })
         .toList();
+
+    if (preview.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No valid guest rows found in CSV')),
+        );
+      }
+      return;
+    }
 
     // Preview dialog
     if (!mounted) return;
@@ -98,14 +111,25 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
             itemBuilder: (_, i) => ListTile(
               dense: true,
               title: Text(preview[i]['name'] as String),
-              subtitle: Text(preview[i]['category'] as String),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (preview[i]['vip'] == true)
+                    const _PreviewTag('VIP', AppTheme.vipGold),
+                  if (preview[i]['close_relative'] == true)
+                    const _PreviewTag('Relative', AppTheme.relativeBlue),
+                ],
+              ),
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true), child: const Text('Import')),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Import')),
         ],
       ),
     );
@@ -198,8 +222,8 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
                   label: 'VIP',
                   selected: _filterVip == true,
                   color: AppTheme.vipGold,
-                  onTap: () => setState(
-                      () => _filterVip = _filterVip == true ? null : true),
+                  onTap: () =>
+                      setState(() => _filterVip = _filterVip == true ? null : true),
                 ),
                 _FilterChipLocal(
                   label: 'Close Relative',
@@ -242,58 +266,43 @@ class _GuestListScreenState extends ConsumerState<GuestListScreen> {
 
   Future<void> _showAddGuestDialog(BuildContext context) async {
     final nameCtrl = TextEditingController();
-    String category = 'Deluxe';
-    const categories = ['Standard', 'Deluxe', 'Suite', 'Premium', 'Executive'];
 
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Add Guest',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Guest Name *'),
-                textCapitalization: TextCapitalization.words,
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                key: ValueKey(category),
-                value: category,
-                decoration: const InputDecoration(labelText: 'Room Category'),
-                items: categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => setLocalState(() => category = v!),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  await ref.read(guestsRepositoryProvider).addGuest(
-                        eventId: widget.eventId,
-                        name: nameCtrl.text.trim(),
-                        assignedCategory: category,
-                      );
-                  if (context.mounted) Navigator.pop(ctx);
-                },
-                child: const Text('Add Guest'),
-              ),
-            ],
-          ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Add Guest',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Guest Name *'),
+              textCapitalization: TextCapitalization.words,
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                await ref.read(guestsRepositoryProvider).addGuest(
+                      eventId: widget.eventId,
+                      name: nameCtrl.text.trim(),
+                    );
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Add Guest'),
+            ),
+          ],
         ),
       ),
     );
@@ -317,7 +326,7 @@ class _GuestTile extends StatelessWidget {
           arguments: {'guestId': guest.id, 'eventId': eventId},
         ),
         leading: CircleAvatar(
-          backgroundColor: GuestStatusHelper.color(guest.status).withValues(alpha:0.15),
+          backgroundColor: GuestStatusHelper.color(guest.status).withValues(alpha: 0.15),
           child: Text(
             guest.name.isNotEmpty ? guest.name[0].toUpperCase() : '?',
             style: TextStyle(
@@ -333,7 +342,7 @@ class _GuestTile extends StatelessWidget {
           ],
         ),
         subtitle: Text(
-          '${guest.assignedCategory} • ${GuestStatusHelper.label(guest.status)}',
+          GuestStatusHelper.label(guest.status),
           style: const TextStyle(fontSize: 12),
         ),
         trailing: StatusBadge(
@@ -369,7 +378,7 @@ class _FilterChipLocal extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? c : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? c : Colors.grey.shade300),
+          border: Border.all(color: selected ? c : AppTheme.neutralStone),
         ),
         child: Text(
           label,
@@ -380,6 +389,26 @@ class _FilterChipLocal extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PreviewTag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _PreviewTag(this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(label,
+          style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
     );
   }
 }

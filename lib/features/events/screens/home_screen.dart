@@ -184,7 +184,7 @@ class _TypeChip extends StatelessWidget {
     final isWedding = type == 'wedding';
     return StatusBadge(
       label: isWedding ? 'Wedding' : 'Corporate',
-      color: isWedding ? AppTheme.accent : AppTheme.primary,
+      color: isWedding ? AppTheme.warning : AppTheme.primary,
     );
   }
 }

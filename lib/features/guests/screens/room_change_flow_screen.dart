@@ -37,7 +37,7 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
             children: [
               // Current room info
               Container(
-                color: Colors.white,
+                color: AppTheme.cardBg,
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +88,7 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
                                     leading: Icon(Icons.hotel,
                                         color: _selectedHotel?.id == h.id
                                             ? AppTheme.primary
-                                            : Colors.grey),
+                                            : AppTheme.neutralStone),
                                     title: Text(h.name),
                                     trailing: _selectedHotel?.id == h.id
                                         ? const Icon(Icons.check_circle,
@@ -101,14 +101,12 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
                     ),
                     if (_selectedHotel != null) ...[
                       const SizedBox(height: 20),
-                      Text(
-                          'Select New Room (${guest.assignedCategory})',
-                          style: const TextStyle(
+                      const Text('Select New Room',
+                          style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       _AvailableRooms(
                         hotelId: _selectedHotel!.id,
-                        category: guest.assignedCategory,
                         excludeRoomId: guest.currentRoomId,
                         selectedRoom: _selectedRoom,
                         onSelected: (r) => setState(() => _selectedRoom = r),
@@ -163,16 +161,16 @@ class _RoomChangeFlowScreenState extends ConsumerState<RoomChangeFlowScreen> {
   }
 }
 
+// Shows all available rooms for the selected hotel — no category gate.
+// Category shown as context. Current room excluded.
 class _AvailableRooms extends ConsumerWidget {
   final int hotelId;
-  final String category;
   final int? excludeRoomId;
   final Room? selectedRoom;
   final ValueChanged<Room> onSelected;
 
   const _AvailableRooms({
     required this.hotelId,
-    required this.category,
     this.excludeRoomId,
     required this.selectedRoom,
     required this.onSelected,
@@ -187,23 +185,20 @@ class _AvailableRooms extends ConsumerWidget {
       error: (e, _) => Text('Error: $e'),
       data: (rooms) {
         final available = rooms
-            .where((r) =>
-                r.status == 'available' &&
-                r.category == category &&
-                r.id != excludeRoomId)
+            .where((r) => r.status == 'available' && r.id != excludeRoomId)
             .toList();
 
         if (available.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.error.withValues(alpha:0.05),
+              color: AppTheme.warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
             ),
-            child: Text(
-              'No available $category rooms (excluding current room).',
-              style: const TextStyle(color: AppTheme.error),
+            child: const Text(
+              'No available rooms (excluding current room).',
+              style: TextStyle(color: AppTheme.warning),
               textAlign: TextAlign.center,
             ),
           );
@@ -217,21 +212,37 @@ class _AvailableRooms extends ConsumerWidget {
             return GestureDetector(
               onTap: () => onSelected(r),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: isSelected ? AppTheme.primary : Colors.white,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSelected ? AppTheme.primary : Colors.grey.shade300,
+                    color: isSelected ? AppTheme.primary : AppTheme.neutralStone,
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Text(
-                  'Room ${r.number}',
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : AppTheme.textPrimary,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Room ${r.number}',
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      r.category,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.8)
+                            : AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

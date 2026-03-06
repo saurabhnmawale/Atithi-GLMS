@@ -1,6 +1,6 @@
-// IMPORTANT: After adding this file, run:
+// IMPORTANT: After modifying this file, run:
 //   dart run build_runner build --delete-conflicting-outputs
-// to generate app_database.g.dart
+// to regenerate app_database.g.dart
 
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
@@ -43,7 +43,9 @@ class Guests extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get eventId => integer().references(Events, #id)();
   TextColumn get name => text()();
-  TextColumn get assignedCategory => text()();
+  // checkoutDate: NULL means inherit event end_date at query time (never copy
+  // events.end_date here — see GuestsRepository.getEffectiveCheckoutDate)
+  DateTimeColumn get checkoutDate => dateTime().nullable()();
   BoolColumn get isVip => boolean().withDefault(const Constant(false))();
   BoolColumn get isCloseRelative => boolean().withDefault(const Constant(false))();
   TextColumn get specialRequests => text().nullable()();
@@ -110,7 +112,21 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onUpgrade: (migrator, from, to) async {
+        if (from < 2) {
+          // v1 → v2: remove assigned_category, add checkout_date (nullable).
+          // TableMigration recreates guests with the current schema definition.
+          // assigned_category is dropped; checkout_date defaults to NULL.
+          await migrator.alterTable(TableMigration(guests));
+        }
+      },
+    );
+  }
 
   static QueryExecutor _openConnection() {
     return driftDatabase(

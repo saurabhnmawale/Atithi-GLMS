@@ -9,6 +9,7 @@ import '../../../app.dart';
 import '../providers/guests_provider.dart';
 import '../../billing/providers/billing_provider.dart';
 import '../../hotels/providers/hotels_provider.dart';
+import '../../events/providers/events_provider.dart';
 
 class GuestDetailScreen extends ConsumerStatefulWidget {
   final int guestId;
@@ -37,7 +38,6 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
       if (rem.isNegative) {
         _undoTimer?.cancel();
         setState(() => _remaining = Duration.zero);
-        // Process expired windows
         ref.read(guestsRepositoryProvider).processExpiredUndoWindows();
       } else {
         setState(() => _remaining = rem);
@@ -52,12 +52,17 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
     final totalAsync = ref.watch(runningTotalProvider(widget.guestId));
     final undoAsync = ref.watch(undoWindowProvider(widget.guestId));
     final hotelsAsync = ref.watch(hotelsForEventProvider(widget.eventId));
+    final eventAsync = ref.watch(eventByIdProvider(widget.eventId));
 
     return guestAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
       data: (guest) {
         if (guest == null) return const Scaffold(body: Center(child: Text('Guest not found')));
+
+        // Resolve effective checkout date
+        final effectiveCheckoutDate = guest.checkoutDate ??
+            eventAsync.whenOrNull(data: (e) => e?.endDate);
 
         // Start countdown if undo window is active
         undoAsync.whenData((window) {
@@ -74,14 +79,14 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _editTags(context, guest),
+                onPressed: () => _editGuestInfo(context, guest, effectiveCheckoutDate),
               ),
             ],
           ),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Undo banner
+              // Undo banner (Dusty Rose, prominent)
               undoAsync.when(
                 data: (window) {
                   if (window == null || window.expiresAt.isBefore(DateTime.now())) {
@@ -93,7 +98,7 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.warning.withValues(alpha:0.1),
+                      color: AppTheme.warning.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppTheme.warning),
                     ),
@@ -109,7 +114,8 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
                         ),
                         TextButton(
                           onPressed: () => _undoCheckout(context, guest, hotelsAsync),
-                          child: const Text('UNDO'),
+                          child: const Text('UNDO',
+                              style: TextStyle(color: AppTheme.warning)),
                         ),
                       ],
                     ),
@@ -135,12 +141,19 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
                           ),
                           const SizedBox(width: 8),
                           GuestTagChip(
-                              isVip: guest.isVip, isCloseRelative: guest.isCloseRelative),
+                              isVip: guest.isVip,
+                              isCloseRelative: guest.isCloseRelative),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _InfoRow('Room Category', guest.assignedCategory),
-                      if (guest.specialRequests != null && guest.specialRequests!.isNotEmpty)
+                      // Checkout date row (tappable to override)
+                      _CheckoutDateRow(
+                        date: effectiveCheckoutDate,
+                        isOverridden: guest.checkoutDate != null,
+                        onTap: () => _pickCheckoutDate(context, guest, effectiveCheckoutDate),
+                      ),
+                      if (guest.specialRequests != null &&
+                          guest.specialRequests!.isNotEmpty)
                         _InfoRow('Special Requests', guest.specialRequests!),
                     ],
                   ),
@@ -267,7 +280,9 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
           OutlinedButton.icon(
             icon: const Icon(Icons.logout),
             label: const Text('Check Out'),
-            style: OutlinedButton.styleFrom(foregroundColor: AppTheme.error),
+            style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.warning,
+                side: const BorderSide(color: AppTheme.warning)),
             onPressed: () => Navigator.pushNamed(
               context,
               AppRoutes.checkoutFlow,
@@ -282,18 +297,43 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
         style: TextStyle(color: AppTheme.textSecondary));
   }
 
-  Future<void> _undoCheckout(BuildContext context, Guest guest, AsyncValue<List<Hotel>> hotelsAsync) async {
+  Future<void> _pickCheckoutDate(
+    BuildContext context,
+    Guest guest,
+    DateTime? currentEffective,
+  ) async {
+    final eventAsync = ref.read(eventByIdProvider(widget.eventId));
+    final event = eventAsync.whenOrNull(data: (e) => e);
+
+    final initial = guest.checkoutDate ?? event?.endDate ?? DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      helpText: 'Select Checkout Date',
+    );
+    if (picked == null) return;
+
+    await ref.read(guestsRepositoryProvider).updateCheckoutDate(guest.id, picked);
+  }
+
+  Future<void> _undoCheckout(
+    BuildContext context,
+    Guest guest,
+    AsyncValue<List<Hotel>> hotelsAsync,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    // We need the last hotel/room — look at stays
     final stays = await ref.read(guestsRepositoryProvider).getStaySegments(guest.id);
     if (stays.isEmpty) return;
     final lastStay = stays.first;
 
     final success = await ref.read(guestsRepositoryProvider).undoCheckout(
-      guestId: guest.id,
-      hotelId: lastStay.hotelId,
-      roomId: lastStay.roomId,
-    );
+          guestId: guest.id,
+          hotelId: lastStay.hotelId,
+          roomId: lastStay.roomId,
+        );
 
     if (mounted) {
       messenger.showSnackBar(
@@ -303,7 +343,11 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
     }
   }
 
-  Future<void> _editTags(BuildContext context, Guest guest) async {
+  Future<void> _editGuestInfo(
+    BuildContext context,
+    Guest guest,
+    DateTime? effectiveCheckoutDate,
+  ) async {
     bool isVip = guest.isVip;
     bool isCloseRelative = guest.isCloseRelative;
     final requestsCtrl = TextEditingController(text: guest.specialRequests ?? '');
@@ -328,17 +372,19 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
               SwitchListTile(
                 title: const Text('VIP'),
                 value: isVip,
+                activeColor: AppTheme.primary,
                 onChanged: (v) => setLocalState(() => isVip = v),
               ),
               SwitchListTile(
                 title: const Text('Close Relative'),
                 value: isCloseRelative,
+                activeColor: AppTheme.primary,
                 onChanged: (v) => setLocalState(() => isCloseRelative = v),
               ),
               TextField(
                 controller: requestsCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Special Requests (optional)'),
+                decoration: const InputDecoration(
+                    labelText: 'Special Requests (optional)'),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
@@ -364,6 +410,60 @@ class _GuestDetailScreenState extends ConsumerState<GuestDetailScreen> {
   }
 }
 
+// ─── Checkout date row — shows effective date, tappable to override ────────────
+
+class _CheckoutDateRow extends StatelessWidget {
+  final DateTime? date;
+  final bool isOverridden;
+  final VoidCallback onTap;
+
+  const _CheckoutDateRow({
+    required this.date,
+    required this.isOverridden,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd MMM yyyy');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text('Checkout Date',
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.textSecondary)),
+          ),
+          Expanded(
+            child: Text(
+              date != null ? fmt.format(date!) : 'Not set',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          GestureDetector(
+            onTap: onTap,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isOverridden)
+                  const Text('(overridden)',
+                      style: TextStyle(
+                          fontSize: 11, color: AppTheme.primary)),
+                const SizedBox(width: 4),
+                const Icon(Icons.edit_calendar_outlined,
+                    size: 16, color: AppTheme.primary),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
@@ -379,11 +479,13 @@ class _InfoRow extends StatelessWidget {
           SizedBox(
             width: 130,
             child: Text(label,
-                style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                style: const TextStyle(
+                    fontSize: 13, color: AppTheme.textSecondary)),
           ),
           Expanded(
               child: Text(value,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500))),
         ],
       ),
     );
@@ -404,7 +506,7 @@ class _StayTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(
           isOpen ? Icons.hotel : Icons.check,
-          color: isOpen ? AppTheme.success : AppTheme.textSecondary,
+          color: isOpen ? AppTheme.success : AppTheme.neutralStone,
         ),
         title: Text('Room #${stay.roomId}',
             style: const TextStyle(fontWeight: FontWeight.w600)),

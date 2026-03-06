@@ -38,7 +38,7 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
           return Column(
             children: [
               Container(
-                color: Colors.white,
+                color: AppTheme.cardBg,
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,7 +58,9 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
                     const Text(
                       'Billing history will carry over to the new hotel.',
                       style: TextStyle(
-                          fontSize: 12, color: AppTheme.primary, fontStyle: FontStyle.italic),
+                          fontSize: 12,
+                          color: AppTheme.primary,
+                          fontStyle: FontStyle.italic),
                     ),
                   ],
                 ),
@@ -103,7 +105,7 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
                                       leading: Icon(Icons.hotel,
                                           color: _destHotel?.id == h.id
                                               ? AppTheme.primary
-                                              : Colors.grey),
+                                              : AppTheme.neutralStone),
                                       title: Text(h.name),
                                       trailing: _destHotel?.id == h.id
                                           ? const Icon(Icons.check_circle,
@@ -117,13 +119,12 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
                     ),
                     if (_destHotel != null) ...[
                       const SizedBox(height: 20),
-                      Text('Select Room (${guest.assignedCategory})',
-                          style: const TextStyle(
+                      const Text('Select Room',
+                          style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       _DestRooms(
                         hotelId: _destHotel!.id,
-                        category: guest.assignedCategory,
                         selectedRoom: _destRoom,
                         onSelected: (r) => setState(() => _destRoom = r),
                       ),
@@ -165,7 +166,7 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
 
     setState(() => _saving = true);
     try {
-      // Transfer is a room change to a different hotel — same DAO method
+      // Transfer = room change to a different hotel — same DAO method
       await ref.read(guestsRepositoryProvider).changeRoom(
             guestId: widget.guestId,
             newHotelId: _destHotel!.id,
@@ -178,15 +179,14 @@ class _GuestTransferFlowScreenState extends ConsumerState<GuestTransferFlowScree
   }
 }
 
+// Shows all available rooms at the destination hotel — no category gate.
 class _DestRooms extends ConsumerWidget {
   final int hotelId;
-  final String category;
   final Room? selectedRoom;
   final ValueChanged<Room> onSelected;
 
   const _DestRooms({
     required this.hotelId,
-    required this.category,
     required this.selectedRoom,
     required this.onSelected,
   });
@@ -199,21 +199,19 @@ class _DestRooms extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Text('Error: $e'),
       data: (rooms) {
-        final available = rooms
-            .where((r) => r.status == 'available' && r.category == category)
-            .toList();
+        final available = rooms.where((r) => r.status == 'available').toList();
 
         if (available.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.error.withValues(alpha:0.05),
+              color: AppTheme.warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
             ),
-            child: Text(
-              'No available $category rooms at this hotel.',
-              style: const TextStyle(color: AppTheme.error),
+            child: const Text(
+              'No available rooms at this hotel.',
+              style: TextStyle(color: AppTheme.warning),
               textAlign: TextAlign.center,
             ),
           );
@@ -227,21 +225,37 @@ class _DestRooms extends ConsumerWidget {
             return GestureDetector(
               onTap: () => onSelected(r),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: isSelected ? AppTheme.primary : Colors.white,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSelected ? AppTheme.primary : Colors.grey.shade300,
+                    color: isSelected ? AppTheme.primary : AppTheme.neutralStone,
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Text(
-                  'Room ${r.number}',
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : AppTheme.textPrimary,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Room ${r.number}',
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      r.category,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.8)
+                            : AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

@@ -37,25 +37,25 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
             children: [
               // Guest info header
               Container(
-                color: Colors.white,
+                color: AppTheme.cardBg,
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      child: Text(guest.name[0].toUpperCase(),
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      backgroundColor: AppTheme.primary.withValues(alpha: 0.15),
+                      child: Text(
+                        guest.name[0].toUpperCase(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primary,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(guest.name,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text('Category: ${guest.assignedCategory}',
-                            style: const TextStyle(
-                                fontSize: 13, color: AppTheme.textSecondary)),
-                      ],
+                    Text(
+                      guest.name,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -91,16 +91,15 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                       },
                     ),
 
-                    // Step 2: Select Room
+                    // Step 2: Select Room (any available — no category constraint)
                     if (_selectedHotel != null) ...[
                       const SizedBox(height: 20),
-                      Text('Step 2: Select Room (${guest.assignedCategory})',
-                          style: const TextStyle(
+                      const Text('Step 2: Select Room',
+                          style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 10),
                       _RoomSelector(
                         hotelId: _selectedHotel!.id,
-                        category: guest.assignedCategory,
                         selectedRoom: _selectedRoom,
                         onRoomSelected: (r) => setState(() => _selectedRoom = r),
                       ),
@@ -120,8 +119,8 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Confirm Check-In'),
                 ),
@@ -139,7 +138,7 @@ class _CheckinFlowScreenState extends ConsumerState<CheckinFlowScreen> {
       context,
       title: 'Confirm Check-In',
       message:
-          'Check in to ${_selectedHotel!.name} — Room ${_selectedRoom!.number}?',
+          'Check in ${_selectedHotel!.name} — Room ${_selectedRoom!.number}?',
       confirmLabel: 'Check In',
     );
     if (confirmed != true) return;
@@ -178,24 +177,25 @@ class _HotelTile extends StatelessWidget {
       ),
       child: ListTile(
         onTap: onTap,
-        leading:
-            Icon(Icons.hotel, color: selected ? AppTheme.primary : Colors.grey),
+        leading: Icon(Icons.hotel, color: selected ? AppTheme.primary : AppTheme.neutralStone),
         title: Text(hotel.name),
-        trailing: selected ? const Icon(Icons.check_circle, color: AppTheme.primary) : null,
+        trailing: selected
+            ? const Icon(Icons.check_circle, color: AppTheme.primary)
+            : null,
       ),
     );
   }
 }
 
+// Shows all available rooms for the selected hotel — no category gate.
+// Category is displayed as context on each chip.
 class _RoomSelector extends ConsumerWidget {
   final int hotelId;
-  final String category;
   final Room? selectedRoom;
   final ValueChanged<Room> onRoomSelected;
 
   const _RoomSelector({
     required this.hotelId,
-    required this.category,
     required this.selectedRoom,
     required this.onRoomSelected,
   });
@@ -208,20 +208,19 @@ class _RoomSelector extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Text('Error: $e'),
       data: (rooms) {
-        final available =
-            rooms.where((r) => r.category == category && r.status == 'available').toList();
+        final available = rooms.where((r) => r.status == 'available').toList();
 
         if (available.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.error.withValues(alpha:0.05),
+              color: AppTheme.warning.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.error.withValues(alpha:0.3)),
+              border: Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
             ),
-            child: Text(
-              'No available $category rooms in this hotel.',
-              style: const TextStyle(color: AppTheme.error),
+            child: const Text(
+              'No available rooms in this hotel.',
+              style: TextStyle(color: AppTheme.warning),
               textAlign: TextAlign.center,
             ),
           );
@@ -235,21 +234,39 @@ class _RoomSelector extends ConsumerWidget {
             return GestureDetector(
               onTap: () => onRoomSelected(r),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: isSelected ? AppTheme.primary : Colors.white,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isSelected ? AppTheme.primary : Colors.grey.shade300,
+                    color: isSelected
+                        ? AppTheme.primary
+                        : AppTheme.neutralStone,
                     width: isSelected ? 2 : 1,
                   ),
                 ),
-                child: Text(
-                  'Room ${r.number}',
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : AppTheme.textPrimary,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Room ${r.number}',
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    Text(
+                      r.category,
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.8)
+                            : AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

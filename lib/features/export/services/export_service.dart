@@ -3,386 +3,226 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' hide Column;
+import 'package:intl/intl.dart';
 import '../../../data/database/app_database.dart';
 
-enum ExportType {
-  guestBills,
-  hotelSummary,
-  consolidatedBilling,
-  guestMovement,
-}
+// PRD v2.2: single consolidated export — one .xlsx file, one row per guest.
+// All previous report-type variants removed.
 
 class ExportService {
-  ExportService({
-    required this.db,
-    required this.event,
-  });
+  ExportService({required this.db, required this.event});
 
   final AppDatabase db;
   final Event event;
 
-  /// Entry point — generates xlsx on the main isolate then shares.
-  // BUG 2B FIX: removed compute(). AppDatabase holds FFI Pointer objects
-  // (native SQLite handles) that cannot be serialized for isolate message
-  // passing — passing it via compute() crashes on Android and iOS.
-  // All DB reads are async and already non-blocking; xlsx assembly is fast
-  // enough on event-scale data to run on the main isolate without jank.
-  Future<void> export(ExportType type) async {
-    final params = _ExportParams(
-      type: type,
-      eventId: event.id,
-      eventName: event.name,
-      db: db,
-    );
-    final bytes = await _generate(params);
+  /// Generates the consolidated guest report and triggers the native share sheet.
+  Future<void> exportConsolidated() async {
+    final bytes = await _generateConsolidated();
 
     final dir = await getTemporaryDirectory();
-    final filename = '${_filename(type)}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    final filename =
+        '${event.name.replaceAll(RegExp(r'[^\w\s]'), '').trim().replaceAll(' ', '_')}_report_${DateTime.now().millisecondsSinceEpoch}.xlsx';
     final file = File('${dir.path}/$filename');
     await file.writeAsBytes(bytes);
 
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-        subject: '${event.name} — ${_label(type)}',
+        files: [
+          XFile(
+            file.path,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          )
+        ],
+        subject: '${event.name} — Guest Report',
       ),
     );
   }
 
-  static String _filename(ExportType type) {
-    switch (type) {
-      case ExportType.guestBills:
-        return 'guest_bills';
-      case ExportType.hotelSummary:
-        return 'hotel_summary';
-      case ExportType.consolidatedBilling:
-        return 'consolidated_billing';
-      case ExportType.guestMovement:
-        return 'guest_movement';
-    }
-  }
+  Future<Uint8List> _generateConsolidated() async {
+    final guests = await db.guestsDao.getGuestsForEvent(event.id);
+    final hotels = await db.hotelsDao.getHotelsForEvent(event.id);
+    final rooms = await db.hotelsDao.getRoomsForEvent(event.id);
+    final serviceTypes = await db.serviceDao.getServiceTypesForEvent(event.id);
 
-  static String _label(ExportType type) {
-    switch (type) {
-      case ExportType.guestBills:
-        return 'Per-Guest Itemized Bills';
-      case ExportType.hotelSummary:
-        return 'Per-Hotel Billing Summary';
-      case ExportType.consolidatedBilling:
-        return 'Consolidated Billing Report';
-      case ExportType.guestMovement:
-        return 'Guest Movement & Room History';
-    }
-  }
-}
+    final hotelMap = {for (final h in hotels) h.id: h.name};
+    final roomMap = {for (final r in rooms) r.id: r.number};
+    final typeMap = {for (final t in serviceTypes) t.id: t.name};
 
-class _ExportParams {
-  final ExportType type;
-  final int eventId;
-  final String eventName;
-  final AppDatabase db;
+    // Build column headers — service type columns are dynamic
+    final serviceTypeIds = serviceTypes.map((t) => t.id).toList();
+    final baseHeaders = [
+      'Guest Name',
+      'VIP',
+      'Close Relative',
+      'Special Requests',
+      'Hotel(s)',
+      'Room(s)',
+      'Check-in Date/Time',
+      'Checkout Date',
+      'Stay Segments',
+    ];
+    final serviceHeaders = serviceTypes.map((t) => t.name).toList();
+    const extraHeaders = ['Total Bill (₹)', 'Status'];
+    final allHeaders = [...baseHeaders, ...serviceHeaders, ...extraHeaders];
 
-  _ExportParams({
-    required this.type,
-    required this.eventId,
-    required this.eventName,
-    required this.db,
-  });
-}
-
-Future<Uint8List> _generate(_ExportParams params) async {
-  switch (params.type) {
-    case ExportType.guestBills:
-      return _generateGuestBills(params);
-    case ExportType.hotelSummary:
-      return _generateHotelSummary(params);
-    case ExportType.consolidatedBilling:
-      return _generateConsolidated(params);
-    case ExportType.guestMovement:
-      return _generateMovement(params);
-  }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-void _applyHeaderStyle(Range cell) {
-  cell.cellStyle.bold = true;
-  cell.cellStyle.backColor = '#1A56DB';
-  cell.cellStyle.fontColor = '#FFFFFF';
-}
-
-// ─── Per-Guest Itemized Bills ─────────────────────────────────────────────────
-
-Future<Uint8List> _generateGuestBills(_ExportParams p) async {
-  final wb = Workbook();
-  final guests = await p.db.guestsDao.getGuestsForEvent(p.eventId);
-  final serviceTypes = await p.db.serviceDao.getServiceTypesForEvent(p.eventId);
-  final typeMap = {for (final t in serviceTypes) t.id: t.name};
-
-  // Remove default sheet if guests exist
-  if (guests.isEmpty) {
+    final wb = Workbook();
     final sheet = wb.worksheets[0];
-    sheet.name = 'No Guests';
-    sheet.getRangeByName('A1').setText('No guests found for this event.');
+    sheet.name = 'Guest Report';
+
+    // Title row
+    final titleRange = sheet.getRangeByIndex(1, 1, 1, allHeaders.length);
+    titleRange.merge();
+    titleRange.setText('${event.name} — Consolidated Guest Report');
+    titleRange.cellStyle.bold = true;
+    titleRange.cellStyle.fontSize = 14;
+    titleRange.cellStyle.backColor = '#F0EBE3';
+    titleRange.cellStyle.fontColor = '#2C1A0E';
+
+    // Sub-header: generated date
+    final subRange = sheet.getRangeByIndex(2, 1, 2, allHeaders.length);
+    subRange.merge();
+    subRange.setText(
+        'Generated: ${DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now())}');
+    subRange.cellStyle.fontSize = 10;
+    subRange.cellStyle.fontColor = '#7A6652';
+
+    // Gold accent row
+    final accentRange = sheet.getRangeByIndex(3, 1, 3, allHeaders.length);
+    accentRange.merge();
+    accentRange.cellStyle.backColor = '#C9A84C';
+
+    // Column headers (row 4)
+    for (var i = 0; i < allHeaders.length; i++) {
+      final cell = sheet.getRangeByIndex(4, i + 1);
+      cell.setText(allHeaders[i]);
+      cell.cellStyle.bold = true;
+      cell.cellStyle.backColor = '#2C1A0E';
+      cell.cellStyle.fontColor = '#FFFFFF';
+    }
+
+    final dateFmt = DateFormat('dd MMM yy, HH:mm');
+    final checkoutFmt = DateFormat('dd MMM yyyy');
+
+    int dataRow = 5;
+
+    for (final guest in guests) {
+      final stays = await db.guestsDao.getStaySegmentsForGuest(guest.id);
+      final charges = await db.serviceDao.getChargesForGuest(guest.id);
+
+      // Hotels stayed (unique, in order)
+      final hotelNames = stays
+          .map((s) => hotelMap[s.hotelId] ?? 'Hotel ${s.hotelId}')
+          .toSet()
+          .join(', ');
+
+      // Rooms (unique, in order)
+      final roomNumbers = stays
+          .map((s) => roomMap[s.roomId] ?? '${s.roomId}')
+          .toSet()
+          .join(', ');
+
+      // First check-in
+      final firstCheckIn = stays.isNotEmpty
+          ? dateFmt.format(stays.last.checkInAt) // stays ordered desc
+          : '';
+
+      // Effective checkout date: guest override or event end_date
+      final checkoutDate =
+          guest.checkoutDate ?? event.endDate;
+      final checkoutStr = checkoutFmt.format(checkoutDate);
+
+      // Stay segments summary (each segment on a new line within cell)
+      final segmentLines = stays.map((s) {
+        final hotel = hotelMap[s.hotelId] ?? 'Hotel ${s.hotelId}';
+        final room = roomMap[s.roomId] ?? '${s.roomId}';
+        final inStr = dateFmt.format(s.checkInAt);
+        final outStr = s.checkOutAt != null
+            ? dateFmt.format(s.checkOutAt!)
+            : 'Active';
+        return '$hotel / Rm $room: $inStr → $outStr';
+      }).join('\n');
+
+      // Service charge amounts keyed by type
+      final chargeByType = <int, double>{};
+      for (final c in charges) {
+        chargeByType[c.typeId] = (chargeByType[c.typeId] ?? 0) + c.amount;
+      }
+      final totalBill = charges.fold<double>(0, (s, c) => s + c.amount);
+
+      // Write base columns
+      int col = 1;
+      sheet.getRangeByIndex(dataRow, col++).setText(guest.name);
+      sheet.getRangeByIndex(dataRow, col++).setText(guest.isVip ? 'Yes' : 'No');
+      sheet.getRangeByIndex(dataRow, col++).setText(guest.isCloseRelative ? 'Yes' : 'No');
+      sheet.getRangeByIndex(dataRow, col++).setText(guest.specialRequests ?? '');
+      sheet.getRangeByIndex(dataRow, col++).setText(hotelNames);
+      sheet.getRangeByIndex(dataRow, col++).setText(roomNumbers);
+      sheet.getRangeByIndex(dataRow, col++).setText(firstCheckIn);
+      sheet.getRangeByIndex(dataRow, col++).setText(checkoutStr);
+      sheet.getRangeByIndex(dataRow, col++).setText(segmentLines);
+
+      // Service type columns
+      for (final typeId in serviceTypeIds) {
+        final amt = chargeByType[typeId];
+        if (amt != null) {
+          sheet.getRangeByIndex(dataRow, col).setNumber(amt);
+        }
+        col++;
+      }
+
+      // Total bill
+      sheet.getRangeByIndex(dataRow, col).setNumber(totalBill);
+      sheet.getRangeByIndex(dataRow, col).cellStyle.bold = true;
+      col++;
+
+      // Status
+      sheet.getRangeByIndex(dataRow, col++).setText(_statusLabel(guest.status));
+
+      // VIP row highlight
+      if (guest.isVip) {
+        for (var c = 1; c <= allHeaders.length; c++) {
+          sheet.getRangeByIndex(dataRow, c).cellStyle.backColor = '#FDF3E7';
+        }
+      }
+
+      dataRow++;
+    }
+
+    // Summary row
+    dataRow++; // blank gap
+    final summaryRow = dataRow;
+    sheet.getRangeByIndex(summaryRow, 1).setText('TOTAL GUESTS: ${guests.length}');
+    sheet.getRangeByIndex(summaryRow, 1).cellStyle.bold = true;
+
+    // Grand total in the Total Bill column
+    final totalBillCol = baseHeaders.length + serviceTypeIds.length + 1;
+    double grandTotal = 0;
+    for (final guest in guests) {
+      final charges = await db.serviceDao.getChargesForGuest(guest.id);
+      grandTotal += charges.fold<double>(0, (s, c) => s + c.amount);
+    }
+    sheet.getRangeByIndex(summaryRow, totalBillCol).setNumber(grandTotal);
+    sheet.getRangeByIndex(summaryRow, totalBillCol).cellStyle.bold = true;
+
+    // Auto-fit columns
+    for (var i = 1; i <= allHeaders.length; i++) {
+      sheet.autoFitColumn(i);
+    }
+
     final bytes = Uint8List.fromList(wb.saveAsStream());
     wb.dispose();
     return bytes;
   }
 
-  bool firstSheet = true;
-  for (final guest in guests) {
-    final charges = await p.db.serviceDao.getChargesForGuest(guest.id);
-
-    Worksheet sheet;
-    if (firstSheet) {
-      sheet = wb.worksheets[0];
-      firstSheet = false;
-    } else {
-      sheet = wb.worksheets.addWithName(guest.name.length > 28
-          ? guest.name.substring(0, 28)
-          : guest.name);
-    }
-    sheet.name = guest.name.length > 31 ? guest.name.substring(0, 31) : guest.name;
-
-    // Title row
-    final titleRange = sheet.getRangeByName('A1:D1');
-    titleRange.merge();
-    titleRange.setText('${p.eventName} — Bill: ${guest.name}');
-    titleRange.cellStyle.bold = true;
-    titleRange.cellStyle.fontSize = 14;
-
-    // Info
-    sheet.getRangeByName('A2').setText('Category: ${guest.assignedCategory}');
-    sheet.getRangeByName('A3').setText(
-        'Tags: ${[if (guest.isVip) 'VIP', if (guest.isCloseRelative) 'Close Relative'].join(', ')}');
-
-    // Headers (row 4)
-    final headers = ['#', 'Service', 'Amount (₹)', 'Date & Time'];
-    for (var i = 0; i < headers.length; i++) {
-      final cell = sheet.getRangeByIndex(4, i + 1);
-      cell.setText(headers[i]);
-      _applyHeaderStyle(cell);
-    }
-
-    // Data rows (starting at row 5)
-    double total = 0;
-    for (var i = 0; i < charges.length; i++) {
-      final c = charges[i];
-      final rowIdx = 5 + i;
-      sheet.getRangeByIndex(rowIdx, 1).setNumber(i + 1);
-      sheet.getRangeByIndex(rowIdx, 2).setText(typeMap[c.typeId] ?? 'Service');
-      sheet.getRangeByIndex(rowIdx, 3).setNumber(c.amount);
-      sheet.getRangeByIndex(rowIdx, 4).setText(c.loggedAt.toLocal().toString().substring(0, 16));
-      total += c.amount;
-    }
-
-    // Total row
-    final totalRowIdx = 5 + charges.length + 1;
-    sheet.getRangeByIndex(totalRowIdx, 2).setText('TOTAL');
-    sheet.getRangeByIndex(totalRowIdx, 2).cellStyle.bold = true;
-    sheet.getRangeByIndex(totalRowIdx, 3).setNumber(total);
-    sheet.getRangeByIndex(totalRowIdx, 3).cellStyle.bold = true;
-
-    sheet.autoFitColumn(1);
-    sheet.autoFitColumn(2);
-    sheet.autoFitColumn(3);
-    sheet.autoFitColumn(4);
-  }
-
-  final bytes = Uint8List.fromList(wb.saveAsStream());
-  wb.dispose();
-  return bytes;
-}
-
-// ─── Per-Hotel Billing Summary ────────────────────────────────────────────────
-
-Future<Uint8List> _generateHotelSummary(_ExportParams p) async {
-  final wb = Workbook();
-  final hotels = await p.db.hotelsDao.getHotelsForEvent(p.eventId);
-  final guests = await p.db.guestsDao.getGuestsForEvent(p.eventId);
-  final serviceTypes = await p.db.serviceDao.getServiceTypesForEvent(p.eventId);
-  final typeMap = {for (final t in serviceTypes) t.id: t.name};
-
-  bool firstSheet = true;
-  for (final hotel in hotels) {
-    Worksheet sheet;
-    if (firstSheet) {
-      sheet = wb.worksheets[0];
-      firstSheet = false;
-    } else {
-      sheet = wb.worksheets.addWithName(hotel.name.length > 31
-          ? hotel.name.substring(0, 31)
-          : hotel.name);
-    }
-    sheet.name = hotel.name.length > 31 ? hotel.name.substring(0, 31) : hotel.name;
-
-    final titleRange = sheet.getRangeByName('A1:E1');
-    titleRange.merge();
-    titleRange.setText('${p.eventName} — ${hotel.name} Billing Summary');
-    titleRange.cellStyle.bold = true;
-
-    // Headers (row 2)
-    final headers = ['Guest', 'Room Category', 'Charges', 'Total (₹)', 'Status'];
-    for (var i = 0; i < headers.length; i++) {
-      final cell = sheet.getRangeByIndex(2, i + 1);
-      cell.setText(headers[i]);
-      _applyHeaderStyle(cell);
-    }
-
-    // Guests who stayed at this hotel (via stay segments)
-    double hotelTotal = 0;
-    int dataRow = 3;
-
-    for (final guest in guests) {
-      final stays = await p.db.guestsDao.getStaySegmentsForGuest(guest.id);
-      final stayedHere = stays.any((s) => s.hotelId == hotel.id);
-      if (!stayedHere) continue;
-
-      final charges = await p.db.serviceDao.getChargesForGuest(guest.id);
-      final chargeCount = charges.length;
-      final total = charges.fold<double>(0.0, (s, c) => s + c.amount);
-
-      sheet.getRangeByIndex(dataRow, 1).setText(guest.name);
-      sheet.getRangeByIndex(dataRow, 2).setText(guest.assignedCategory);
-      sheet.getRangeByIndex(dataRow, 3).setNumber(chargeCount.toDouble());
-      sheet.getRangeByIndex(dataRow, 4).setNumber(total);
-      sheet.getRangeByIndex(dataRow, 5).setText(guest.status == 'checked_out' ? 'Checked Out' : 'Active');
-      hotelTotal += total;
-      dataRow++;
-    }
-
-    // Total
-    final totalRowIdx = dataRow + 1;
-    sheet.getRangeByIndex(totalRowIdx, 1).setText('HOTEL TOTAL');
-    sheet.getRangeByIndex(totalRowIdx, 1).cellStyle.bold = true;
-    sheet.getRangeByIndex(totalRowIdx, 4).setNumber(hotelTotal);
-    sheet.getRangeByIndex(totalRowIdx, 4).cellStyle.bold = true;
-
-    for (var i = 1; i <= 5; i++) { sheet.autoFitColumn(i); }
-  }
-
-  // suppress unused variable warning
-  // ignore: unused_local_variable
-  final _ = typeMap;
-
-  final bytes = Uint8List.fromList(wb.saveAsStream());
-  wb.dispose();
-  return bytes;
-}
-
-// ─── Consolidated Billing ─────────────────────────────────────────────────────
-
-Future<Uint8List> _generateConsolidated(_ExportParams p) async {
-  final wb = Workbook();
-  final sheet = wb.worksheets[0];
-  sheet.name = 'Consolidated';
-
-  final guests = await p.db.guestsDao.getGuestsForEvent(p.eventId);
-  final serviceTypes = await p.db.serviceDao.getServiceTypesForEvent(p.eventId);
-  final typeMap = {for (final t in serviceTypes) t.id: t.name};
-
-  final titleRange = sheet.getRangeByName('A1:F1');
-  titleRange.merge();
-  titleRange.setText('${p.eventName} — Consolidated Billing Report');
-  titleRange.cellStyle.bold = true;
-  titleRange.cellStyle.fontSize = 14;
-
-  // Headers (row 2)
-  final headers = ['Guest', 'VIP', 'Category', 'Hotels Stayed', 'Total Charges', 'Total (₹)'];
-  for (var i = 0; i < headers.length; i++) {
-    final cell = sheet.getRangeByIndex(2, i + 1);
-    cell.setText(headers[i]);
-    _applyHeaderStyle(cell);
-  }
-
-  double grandTotal = 0;
-  int dataRow = 3;
-
-  for (final guest in guests) {
-    final charges = await p.db.serviceDao.getChargesForGuest(guest.id);
-    final stays = await p.db.guestsDao.getStaySegmentsForGuest(guest.id);
-    final hotelCount = stays.map((s) => s.hotelId).toSet().length;
-    final total = charges.fold<double>(0.0, (s, c) => s + c.amount);
-
-    sheet.getRangeByIndex(dataRow, 1).setText(guest.name);
-    sheet.getRangeByIndex(dataRow, 2).setText(guest.isVip ? 'VIP' : '');
-    sheet.getRangeByIndex(dataRow, 3).setText(guest.assignedCategory);
-    sheet.getRangeByIndex(dataRow, 4).setNumber(hotelCount.toDouble());
-    sheet.getRangeByIndex(dataRow, 5).setNumber(charges.length.toDouble());
-    sheet.getRangeByIndex(dataRow, 6).setNumber(total);
-    grandTotal += total;
-    dataRow++;
-  }
-
-  // Grand total
-  final totalRowIdx = dataRow + 1;
-  sheet.getRangeByIndex(totalRowIdx, 1).setText('GRAND TOTAL');
-  sheet.getRangeByIndex(totalRowIdx, 1).cellStyle.bold = true;
-  sheet.getRangeByIndex(totalRowIdx, 6).setNumber(grandTotal);
-  sheet.getRangeByIndex(totalRowIdx, 6).cellStyle.bold = true;
-
-  for (var i = 1; i <= 6; i++) { sheet.autoFitColumn(i); }
-
-  // suppress unused variable warning
-  // ignore: unused_local_variable
-  final _ = typeMap;
-
-  final bytes = Uint8List.fromList(wb.saveAsStream());
-  wb.dispose();
-  return bytes;
-}
-
-// ─── Guest Movement & Room History ────────────────────────────────────────────
-
-Future<Uint8List> _generateMovement(_ExportParams p) async {
-  final wb = Workbook();
-  final sheet = wb.worksheets[0];
-  sheet.name = 'Guest Movement';
-
-  final guests = await p.db.guestsDao.getGuestsForEvent(p.eventId);
-  final hotels = await p.db.hotelsDao.getHotelsForEvent(p.eventId);
-  final hotelMap = {for (final h in hotels) h.id: h.name};
-  final rooms = await p.db.hotelsDao.getRoomsForEvent(p.eventId);
-  final roomMap = {for (final r in rooms) r.id: r.number};
-
-  final titleRange = sheet.getRangeByName('A1:G1');
-  titleRange.merge();
-  titleRange.setText('${p.eventName} — Guest Movement & Room History');
-  titleRange.cellStyle.bold = true;
-  titleRange.cellStyle.fontSize = 14;
-
-  // Headers (row 2)
-  final headers = ['Guest', 'Hotel', 'Room', 'Room Category', 'Check-In', 'Check-Out', 'Duration'];
-  for (var i = 0; i < headers.length; i++) {
-    final cell = sheet.getRangeByIndex(2, i + 1);
-    cell.setText(headers[i]);
-    _applyHeaderStyle(cell);
-  }
-
-  int dataRow = 3;
-  for (final guest in guests) {
-    final stays = await p.db.guestsDao.getStaySegmentsForGuest(guest.id);
-    for (final s in stays) {
-      final duration = s.checkOutAt != null
-          ? s.checkOutAt!.difference(s.checkInAt)
-          : DateTime.now().difference(s.checkInAt);
-      final durationStr =
-          '${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
-
-      sheet.getRangeByIndex(dataRow, 1).setText(guest.name);
-      sheet.getRangeByIndex(dataRow, 2).setText(hotelMap[s.hotelId] ?? 'Hotel ${s.hotelId}');
-      sheet.getRangeByIndex(dataRow, 3).setText(roomMap[s.roomId] ?? '${s.roomId}');
-      sheet.getRangeByIndex(dataRow, 4).setText(guest.assignedCategory);
-      sheet.getRangeByIndex(dataRow, 5).setText(s.checkInAt.toLocal().toString().substring(0, 16));
-      sheet.getRangeByIndex(dataRow, 6).setText(s.checkOutAt?.toLocal().toString().substring(0, 16) ?? 'Active');
-      sheet.getRangeByIndex(dataRow, 7).setText(durationStr);
-      dataRow++;
+  static String _statusLabel(String status) {
+    switch (status) {
+      case 'checked_in':
+        return 'Checked In';
+      case 'checked_out':
+        return 'Checked Out';
+      default:
+        return 'Not Checked In';
     }
   }
-
-  for (var i = 1; i <= 7; i++) { sheet.autoFitColumn(i); }
-
-  final bytes = Uint8List.fromList(wb.saveAsStream());
-  wb.dispose();
-  return bytes;
 }

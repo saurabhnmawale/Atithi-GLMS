@@ -34,6 +34,10 @@ class GuestsDao extends DatabaseAccessor<AppDatabase> with _$GuestsDaoMixin {
   Future<void> insertGuests(List<GuestsCompanion> entries) =>
       batch((b) => b.insertAll(guests, entries));
 
+  Future<void> updateCheckoutDate(int guestId, DateTime? date) =>
+      (update(guests)..where((g) => g.id.equals(guestId)))
+          .write(GuestsCompanion(checkoutDate: Value(date)));
+
   // ── Check-in / Check-out ──────────────────────────────────────────────────
 
   /// Check in a guest to a room

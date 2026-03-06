@@ -155,7 +155,7 @@ class _ActionGrid extends StatelessWidget {
         icon: Icons.hotel_outlined,
         label: 'Hotels & Rooms',
         route: AppRoutes.roomInventory,
-        color: AppTheme.accent,
+        color: AppTheme.success,
       ),
       const _ActionItem(
         icon: Icons.add_business,
